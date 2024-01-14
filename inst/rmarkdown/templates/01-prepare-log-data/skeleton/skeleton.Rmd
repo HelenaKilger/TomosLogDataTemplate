@@ -1,0 +1,276 @@
+---
+title: "Prepare Log Data"
+author: "Helena Kilger"
+date: "2024-01-08"
+output: html_document
+---
+
+## Overview
+
+## Load data
+
+```{r load_data}
+
+# install required R libraries if not installed already
+list.of.packages <- c("psych", "plyr", "dplyr", "reshape2", "stringr", "naniar", "sqldf")
+new.packages <- list.of.packages[!(list.of.packages %in% installed.packages()[,"Package"])]
+if(length(new.packages)) install.packages(new.packages)
+
+# load required libraries
+lapply(list.of.packages, require, quietly = TRUE, warn.conflicts = FALSE, character.only = TRUE)
+
+# read in log data
+log <- read.csv("log.data.name.csv", sep = ';') # insert name of log data file. File should be in same folder as this script. Evtl. change ";" to something else.
+
+# change order of log data
+log <- log[order(log$Anon.Student.Id, log$Time),] # change variable names to order by these. Keeping order is important for cycling through rows if necessary
+
+# change value names if necessary
+log$condition <- ifelse(log$Level..Assignment. == "control", "N",
+                        ifelse(log$Level..Assignment. == "experiment", "Y", NA)) # in this example: create new variable named "condition". If "Level..Assignment" is "control", put "N" in condition.
+
+# evtl. do some data exclusion already 
+log <- filter(log, Anon.Student.Id != "tomo" & Anon.Student.Id != "admin" & Anon.Student.Id != "cmutest") # only keep rows without testers' names in Id column.
+
+# create numerical id variable (for some kind of analysees needed)
+log$id <- as.numeric(as.factor(log$Anon.Student.Id))
+
+# delete rows in a problem after problem was finished (e.g., opened in a second tab?)
+log$cur.time <- as.POSIXct(log$Time, format = "%Y-%m-%dT%H:%M:%SZ") # convert time into something to work with
+log$done.time <- ifelse(log$Step.Name == "done ButtonPressed" & log$Outcome == "CORRECT", log$cur.time, NA) # time at which participant finished a problem (done + correct)
+log["done.time"][is.na(log["done.time"])] <- 0 # no missing values in this... 
+log <- log %>% group_by(id, Problem.Start.Time) %>%  dplyr::mutate(done.time2 = ave(done.time, FUN = max)) %>% ungroup() # if (for some reason) two done times exist, keep the higher one (max)
+log <- log %>% group_by(id, Problem.Start.Time) %>%  dplyr::mutate(late = case_when(cur.time > done.time2 ~ TRUE, cur.time <= done.time2 ~ FALSE)) %>% ungroup() # mark all rows that happen after problem was already done (late)
+table(log$late) # how many late rows?
+log <- filter(log, late == FALSE) # delete late rows
+table(log$late) # check if successfully deleted (0?)
+
+# standardize problem names (if needed at all, depends on how problems were named before. Goal: Have variable with numerical ids for problems)
+table(log$Problem.Name) # look at current names
+table(log$Problem)
+
+log$Problem.Name <- str_replace(log$Problem.Name, "eq", "=")
+log$Problem.Name <- str_replace(log$Problem.Name, "plus", "+")
+log$Problem.Name <- str_replace(log$Problem.Name, "plus", "+")
+log$Problem.Name <- str_replace(log$Problem.Name, "Diagrams Choice", "")
+log$Problem.Name <- str_replace(log$Problem.Name, "Diagram Choice", "")
+log$Problem.Name <- str_replace(log$Problem.Name, "Detectors", "")
+log$Problem.Name <- str_replace(log$Problem.Name, "-diagrams-choice-detectors", "")
+log$Problem.Name <- str_replace(log$Problem.Name, "-diagrams-choice", "")
+log$Problem.Name <- str_replace(log$Problem.Name, " ", "")
+log$Problem.Name <- str_replace(log$Problem.Name, " ", "")
+
+log$Problem.Name <- ifelse(startsWith(log$Problem.Name, "badges") | startsWith(log$Problem.Name, "none") | startsWith(log$Problem.Name, "Tutorial"), NA, log$Problem.Name)
+
+log$Problem <- ifelse(log$Problem.Name == "x+2=6", 1,  # very long ifelse statement (if variable name is..., new variable name should be 1, else: if variable name is ..., new name should be 2, ...)
+                      ifelse(log$Problem.Name =="5+x=7", 2,
+                      ifelse(log$Problem.Name == "8=x+3", 3,
+                      ifelse(log$Problem.Name =="7=2+x", 4,
+                      ifelse(log$Problem.Name =="2x+3=7", 5,
+                      ifelse(log$Problem.Name == "3x+1=10", 6,
+                      ifelse(log$Problem.Name == "7+2x=11", 7,
+                      ifelse(log$Problem.Name == "1+2x=5", 8,
+                      ifelse(log$Problem.Name == "4x+3=11", 9,
+                      ifelse(log$Problem.Name == "8=3+5x", 10,
+                      ifelse(log$Problem.Name == "15=4x+3", 11,
+                      ifelse(log$Problem.Name == "19=3x+4", 12,
+                      ifelse(log$Problem.Name == "3x=x+4", 13, 
+                      ifelse(log$Problem.Name == "7x=4x+9", 14,
+                      ifelse((log$Level..ProblemSet. == "Lynnette Level 4") & (log$Problem.Name == "5x=2x+15"), 15,
+                      ifelse(log$Problem.Name == "9x=5x+8", 16,
+                      ifelse(log$Problem.Name == "6x=2x+8", 17,
+                      ifelse(log$Level..ProblemSet. == "Lynnette Level 5" & log$Problem.Name == "6x=7+5x", 18,
+                      ifelse(log$Problem.Name == "6x=4x+10", 19,
+                      ifelse(log$Problem.Name == "8x=2x+6", 20,
+                      ifelse(log$Problem.Name == "4x+1=x+10", 21,
+                      ifelse(log$Problem.Name == "5x+2=2x+8", 22,
+                      ifelse(log$Problem.Name == "6x+3=x+13", 23,
+                      ifelse(log$Problem.Name == "8x+1=2x+13", 24,
+                      ifelse(log$Problem.Name == "1+9x=8+2x", 25,
+                      ifelse(log$Problem.Name == "2+7x=11+4x", 26,
+                      ifelse(log$Problem.Name == "3+6x=9+4x", 27,
+                      ifelse(log$Problem.Name == "4+5x=8+3x", 28,
+                      ifelse(log$Problem.Name == "4x+13=41", 29, 
+                      ifelse(log$Problem.Name == "21+2x=31", 30,
+                      ifelse(log$Problem.Name == "41=2x+19", 31,                                                                      
+                      ifelse(log$Problem.Name == "49=22+3x", 32,
+                      ifelse(log$Problem.Name == "12x=9x+48", 33,
+                      ifelse(log$Problem.Name == "6x=38+4x", 34,
+                      ifelse(log$Problem.Name == "7x=36+4x", 35,
+                      ifelse(log$Problem.Name == "9x=7x+48", 36,
+                      ifelse(log$Problem.Name == "5x+19=3x+33", 37,
+                      ifelse(log$Problem.Name == "8x+20=5x+29", 38,
+                      ifelse(log$Problem.Name == "19+9x=41+7x", 39,
+                      ifelse(log$Problem.Name == "29+11x=47+8x", 40,
+                      ifelse(log$Level..ProblemSet. == "Lynnette Level 11" & log$Problem.Name == "5x=2x+15", 41,
+                      ifelse(log$Problem.Name == "7x=20+2x", 42,
+                      ifelse(log$Level..ProblemSet. == "Lynnette Level 11" & log$Problem.Name == "6x=7+5x", 43, #2 x 42
+                      ifelse(log$Problem.Name == "7x=2x+5", 44,
+                      ifelse(log$Problem.Name == "4x+3=2x+7", 45,
+                      ifelse(log$Problem.Name == "6x+1=13+2x", 46,
+                      ifelse(log$Problem.Name == "8x+3=5+6x", 47,
+                      ifelse(log$Problem.Name == "3x+5=x+11", 48, NA))))))))))))))))))))))))))))))))))))))))))))))))
+
+
+# two ways to write csv -> we will use the first one to read in again in r mackages, the second one is sometimes easier to open in excel (good to know both options)
+write.csv(log, "log.csv", row.names = FALSE)
+write.csv2(log, "log2.csv", row.names = FALSE)
+
+
+
+```
+
+## Some elements to create variables 
+
+Put these together as needed. Never follow them blindly! Always check your data frame (e.g., order, values, ...) before and after a step to make sure the result is as intended.
+
+# Identify steps 
+
+```{r identify steps}
+
+# make sure your data frame is in the correct order (ordered by users, inside users: ordered by time)
+log <- log[order(log$Anon.Student.Id, log$Time),]
+
+# 1. identify the borders between steps. in this case: A new steps starts when a) problem name changes and b) the previous step was solved correct.
+log$step.switch <- 0
+o = 1
+for (i in 2:nrow(log)) {
+  if (is.na(log$Problem[i]) & !is.na(log$Problem[o])) { # a)
+    log$step.switch[i] = 1
+  }
+    if (!is.na(log$Problem[i]) & is.na(log$Problem[o])) { # a)
+    log$step.switch[i] = 1
+  } 
+  if (!is.na(log$Problem[i]) & !is.na(log$Problem[o])) { # a)
+    if (log[i, "Problem"] != log[o, "Problem"]) {
+    log$step.switch[i] = 1
+  }
+  if (!is.na(log$Step.Name[i]) & !is.na(log$Outcome[i])) {
+    if ((endsWith(log$Step.Name[i], "UpdateTextField")) & (log$Outcome[i] == "CORRECT")) { # b)
+    log$step.switch[i] = 1
+  }
+  }
+  }
+  o = i
+}
+
+step.rows <- which(log$step.switch == 1)
+
+# count through the steps (every step gets a unique id)
+o = 0
+a = 1
+log$step = 0
+
+for (i in step.rows) {
+  if (o > 0) {
+    log[o:i, "step"] = a
+    a = a+1
+  }
+    o = i
+}
+
+## count steps
+
+# sum of steps
+log$step <- ifelse(endsWith(log$Step.Name, "UpdateTextField") & log$Attempt.At.Step == 1, 1, 0) # count how often the student started a "real" problem solving step
+
+# problem level (= long = one row for every problem)
+long.steps <- log %>%
+  group_by(Anon.Student.Id, Problem) %>%
+  summarise( 
+    step.sum=sum(step, na.rm = TRUE) # how often "1", indicating starting a new step?
+  ) %>% ungroup()
+long.steps <- na.omit(long.steps) # omit missing values
+
+# student level (= wide = one row for every student)
+wide.steps <- dcast(long.steps, Anon.Student.Id ~ Problem) # to transform long in wide format
+
+# badge level (= one row for every problem set/badge)
+a <- 2
+o <- 5
+for(i in 1:12) {
+  name <- paste0("step.badge.",i)
+  wide.steps[, name] <- rowSums(wide.steps[ , c(a:o)])
+  a <- a+4
+  o <- o+4
+}
+
+wide.steps$id <- as.numeric(as.factor(wide.steps$Anon.Student.Id))
+
+# person level
+wide.steps <- wide.steps %>%
+  transform(N.steps=apply(.[,2:49],1, sum, na.rm = TRUE))
+
+```
+
+# hint use per step
+
+```{r hint use per step}
+
+
+# select only one hint per step
+log1 <- log %>%
+  filter(Outcome == "HINT") # filter: keep only rows with hint usage
+
+log1 = log1[!duplicated(log1$step),] # only one hint per step: if there are multiple rows with hints in the same step, get rid of them
+
+# problem level (= long = one row for every problem)
+long.hint <- log1 %>%
+  group_by(Anon.Student.Id, Problem) %>%
+  summarise( 
+    hint=n(), # how many hints did a person request per problem (only considering the first hint per step)
+  )  %>% ungroup()
+
+long.hint <- merge(x=long.hint, y=long.steps, by=c("Anon.Student.Id", "Problem"), all = TRUE)
+long.hint["hint"][is.na(long.hint["hint"])] <- 0
+long.hint$hint.step <- long.hint$hint / long.hint$step.sum
+
+wide.hint <- dcast(long.hint, Anon.Student.Id ~ Problem, value.var = "hint")
+
+wide.hint.step.2 <- dcast(long.hint, Anon.Student.Id ~ Problem, value.var = "hint.step") 
+colnames(wide.hint.step.2)[2:49] <- paste("hint.step.problem", colnames(wide.hint.step.2)[2:49], sep = ".")
+
+
+# badge level
+a <- 2
+o <- 5
+for(i in 1:12) {
+  name <- paste0("hint.",i)
+  wide.hint[, name] <- rowSums(wide.hint[ , c(a:o)])
+  a <- a+4
+  o <- o+4
+}
+
+wide.hint$id <- as.numeric(as.factor(wide.hint$Anon.Student.Id))
+
+# person level
+wide.hint <- wide.hint %>%
+  transform(N.hint=apply(.[,2:49],1, sum, na.rm = TRUE))
+
+# combine hint and steps
+#person level
+wide.hint.step <- merge(x=wide.hint, y=wide.steps, by=c("Anon.Student.Id"), all.x = TRUE)
+wide.hint.step$hint.step <- wide.hint.step$N.hint / wide.hint.step$N.steps
+
+#badge level
+for(i in 50:61) {
+  name <- paste0("hint.step.badge.",i-49)
+  wide.hint.step[, name] <- wide.hint.step[i]/wide.hint.step[i+62]
+}
+  
+badge.hint.step <- wide.hint.step %>%
+  dplyr::select( "Anon.Student.Id", starts_with("hint.step.badge"))%>%
+  melt(., id.vars=c("Anon.Student.Id"), variable.name = "Level", value.name = "hint.step.badge")
+badge.hint.step$Level <- as.numeric(as.factor(badge.hint.step$Level))
+
+
+wide.hint.step <- wide.hint.step[-2:-125]
+
+wide.hint.step <- merge(x=wide.hint.step, y=wide.hint.step.2, by=c("Anon.Student.Id"), all.x = TRUE)
+
+
+
+
+
+```
+
